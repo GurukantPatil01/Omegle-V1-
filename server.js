@@ -91,6 +91,27 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Handle chat messages
+  socket.on('chat-message', (data) => {
+    const userInfo = connectedUsers.get(socket.id);
+    if (userInfo) {
+      // Forward message to partner
+      socket.to(userInfo.roomId).emit('chat-message', {
+        message: data.message,
+        from: socket.id,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Send confirmation back to sender
+      socket.emit('chat-message-sent', {
+        message: data.message,
+        timestamp: new Date().toISOString()
+      });
+      
+      console.log(`Chat message forwarded from ${socket.id} to ${userInfo.partnerId}: ${data.message}`);
+    }
+  });
+
   // Handle next partner request
   socket.on('next-partner', () => {
     const userInfo = connectedUsers.get(socket.id);

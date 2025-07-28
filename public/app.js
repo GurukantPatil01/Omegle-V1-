@@ -17,6 +17,12 @@ class WebRTCVideoChat {
         this.nextButton = document.getElementById('nextButton');
         this.stopButton = document.getElementById('stopButton');
         this.connectionStatus = document.getElementById('connection-status');
+        
+        // Chat elements
+        this.chatMessages = document.getElementById('chatMessages');
+        this.messageInput = document.getElementById('messageInput');
+        this.sendButton = document.getElementById('sendButton');
+        this.chatStatus = document.getElementById('chat-status');
 
         // WebRTC configuration with STUN servers
         this.rtcConfig = {
@@ -47,11 +53,14 @@ class WebRTCVideoChat {
         this.socket.on('disconnect', () => {
             console.log('Disconnected from signaling server');
             this.updateStatus('Disconnected from server', 'error');
+            this.updateChatStatus('Disconnected');
         });
 
         this.socket.on('waiting', () => {
             this.updateStatus('Waiting for a partner...', 'waiting');
             this.logSignaling('Waiting for partner to join');
+            this.updateChatStatus('Waiting for partner...');
+            this.addSystemMessage('Waiting for a partner to join...');
         });
 
         this.socket.on('matched', (data) => {
@@ -60,7 +69,10 @@ class WebRTCVideoChat {
             this.updatePartnerId(data.partnerId);
             this.updateRoomId(data.roomId);
             this.updateStatus('Partner found! Establishing connection...', 'connected');
+            this.updateChatStatus('Connected');
             this.logSignaling(`Matched with partner: ${data.partnerId}`);
+            this.addSystemMessage('Partner found! You can now chat and video call.');
+            this.enableChat();
             
             // Start WebRTC connection
             this.startWebRTCConnection();
@@ -84,9 +96,23 @@ class WebRTCVideoChat {
             this.handleIceCandidate(data.candidate);
         });
 
+        // Chat message events
+        this.socket.on('chat-message', (data) => {
+            this.addMessage(data.message, 'received');
+            this.logChat('Received Message', data.message);
+        });
+
+        this.socket.on('chat-message-sent', (data) => {
+            this.addMessage(data.message, 'sent');
+            this.logChat('Sent Message', data.message);
+        });
+
         this.socket.on('partner-left', () => {
             this.updateStatus('Partner disconnected', 'error');
+            this.updateChatStatus('Disconnected');
             this.logSignaling('Partner left the chat');
+            this.addSystemMessage('Partner has disconnected.');
+            this.disableChat();
             this.cleanupConnection();
         });
     }
@@ -96,6 +122,67 @@ class WebRTCVideoChat {
         this.startButton.addEventListener('click', () => this.startChat());
         this.nextButton.addEventListener('click', () => this.nextPartner());
         this.stopButton.addEventListener('click', () => this.stopChat());
+        
+        // Chat events
+        this.sendButton.addEventListener('click', () => this.sendMessage());
+        this.messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.sendMessage();
+            }
+        });
+    }
+
+    // Send chat message
+    sendMessage() {
+        const message = this.messageInput.value.trim();
+        if (message && this.socket && this.partnerId) {
+            this.socket.emit('chat-message', { message: message });
+            this.messageInput.value = '';
+        }
+    }
+
+    // Add message to chat
+    addMessage(message, type) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${type}`;
+        messageDiv.textContent = message;
+        this.chatMessages.appendChild(messageDiv);
+        this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+    }
+
+    // Add system message
+    addSystemMessage(message) {
+        // Clear existing system messages
+        const existingSystem = this.chatMessages.querySelector('.system-message');
+        if (existingSystem) {
+            existingSystem.remove();
+        }
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'system-message';
+        messageDiv.textContent = message;
+        this.chatMessages.appendChild(messageDiv);
+        this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+    }
+
+    // Enable chat functionality
+    enableChat() {
+        this.messageInput.disabled = false;
+        this.sendButton.disabled = false;
+        this.messageInput.placeholder = 'Type your message...';
+    }
+
+    // Disable chat functionality
+    disableChat() {
+        this.messageInput.disabled = true;
+        this.sendButton.disabled = true;
+        this.messageInput.placeholder = 'Chat disabled';
+    }
+
+    // Update chat status
+    updateChatStatus(status) {
+        this.chatStatus.textContent = status;
+        this.chatStatus.className = `chat-status ${status.toLowerCase().includes('connected') ? 'connected' : 'disconnected'}`;
     }
 
     // Start the chat process
@@ -117,6 +204,8 @@ class WebRTCVideoChat {
             
             this.startButton.disabled = true;
             this.updateStatus('Waiting for partner...', 'waiting');
+            this.updateChatStatus('Waiting for partner...');
+            this.addSystemMessage('Waiting for a partner to join...');
             
         } catch (error) {
             console.error('Error accessing media devices:', error);
@@ -171,10 +260,12 @@ class WebRTCVideoChat {
             
             if (this.peerConnection.connectionState === 'connected') {
                 this.updateStatus('Connected! Video chat is active.', 'connected');
+                this.updateChatStatus('Connected');
                 this.nextButton.disabled = false;
                 this.stopButton.disabled = false;
             } else if (this.peerConnection.connectionState === 'failed') {
                 this.updateStatus('Connection failed', 'error');
+                this.updateChatStatus('Connection Failed');
             }
         };
 
@@ -266,6 +357,8 @@ class WebRTCVideoChat {
         this.socket.emit('next-partner');
         this.cleanupConnection();
         this.updateStatus('Looking for next partner...', 'waiting');
+        this.updateChatStatus('Looking for partner...');
+        this.addSystemMessage('Looking for a new partner...');
         this.nextButton.disabled = true;
         this.stopButton.disabled = true;
     }
@@ -274,6 +367,8 @@ class WebRTCVideoChat {
     stopChat() {
         this.cleanupConnection();
         this.updateStatus('Chat stopped. Click "Start Chat" to begin again.', 'waiting');
+        this.updateChatStatus('Disconnected');
+        this.addSystemMessage('Chat stopped. Click "Start Chat" to begin again.');
         this.startButton.disabled = false;
         this.nextButton.disabled = true;
         this.stopButton.disabled = true;
@@ -304,6 +399,7 @@ class WebRTCVideoChat {
         this.updateSignalingState('-');
         this.updateLocalCandidates();
         this.updateRemoteCandidates();
+        this.disableChat();
     }
 
     // UI update methods
@@ -386,6 +482,16 @@ class WebRTCVideoChat {
         const logEntry = document.createElement('div');
         logEntry.className = 'log-entry received';
         logEntry.textContent = `[${timestamp}] ${message}: ${sdp.type} - ${sdp.sdp.substring(0, 100)}...`;
+        logElement.appendChild(logEntry);
+        logElement.scrollTop = logElement.scrollHeight;
+    }
+
+    logChat(message, content) {
+        const logElement = document.getElementById('chatDebugMessages');
+        const timestamp = new Date().toLocaleTimeString();
+        const logEntry = document.createElement('div');
+        logEntry.className = 'log-entry received';
+        logEntry.textContent = `[${timestamp}] ${message}: ${content}`;
         logElement.appendChild(logEntry);
         logElement.scrollTop = logElement.scrollHeight;
     }
