@@ -3,15 +3,12 @@ class WebRTCVideoChat {
     constructor() {
         this.socket = null;
         this.localStream = null;
-        this.remoteStream = null;
         this.peerConnection = null;
         this.partnerId = null;
         this.roomId = null;
         this.isInitiator = false;
         this.localCandidates = 0;
         this.remoteCandidates = 0;
-        this.connectionAttempts = 0;
-        this.maxConnectionAttempts = 3;
 
         // DOM elements
         this.localVideo = document.getElementById('localVideo');
@@ -20,38 +17,16 @@ class WebRTCVideoChat {
         this.nextButton = document.getElementById('nextButton');
         this.stopButton = document.getElementById('stopButton');
         this.connectionStatus = document.getElementById('connection-status');
-        
-        // Chat elements
-        this.chatMessages = document.getElementById('chatMessages');
-        this.messageInput = document.getElementById('messageInput');
-        this.sendButton = document.getElementById('sendButton');
-        this.chatStatus = document.getElementById('chat-status');
 
-        // Enhanced WebRTC configuration with multiple STUN servers
+        // WebRTC configuration with STUN servers
         this.rtcConfig = {
             iceServers: [
-                // Google's public STUN servers
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:stun2.l.google.com:19302' },
                 { urls: 'stun:stun3.l.google.com:19302' },
-                { urls: 'stun:stun4.l.google.com:19302' },
-                // Additional STUN servers for better connectivity
-                { urls: 'stun:stun.stunprotocol.org:3478' },
-                { urls: 'stun:stun.voiparound.com:3478' },
-                { urls: 'stun:stun.voipbuster.com:3478' },
-                { urls: 'stun:stun.voipstunt.com:3478' },
-                { urls: 'stun:stun.voxgratia.org:3478' },
-                // Add TURN servers here if needed for production
-                // {
-                //     urls: 'turn:your-turn-server.com:3478',
-                //     username: 'username',
-                //     credential: 'password'
-                // }
-            ],
-            iceCandidatePoolSize: 10,
-            bundlePolicy: 'max-bundle',
-            rtcpMuxPolicy: 'require'
+                { urls: 'stun:stun4.l.google.com:19302' }
+            ]
         };
 
         this.initializeSocket();
@@ -61,11 +36,7 @@ class WebRTCVideoChat {
 
     // Initialize Socket.IO connection
     initializeSocket() {
-        this.socket = io({
-            transports: ['websocket', 'polling'],
-            timeout: 20000,
-            forceNew: true
-        });
+        this.socket = io();
         
         this.socket.on('connect', () => {
             console.log('Connected to signaling server');
@@ -73,37 +44,23 @@ class WebRTCVideoChat {
             this.updateUserId(this.socket.id);
         });
 
-        this.socket.on('connect_error', (error) => {
-            console.error('Socket connection error:', error);
-            this.updateStatus('Failed to connect to server', 'error');
-            this.logSignaling(`Connection error: ${error.message}`, 'error');
-        });
-
-        this.socket.on('disconnect', (reason) => {
-            console.log('Disconnected from signaling server:', reason);
+        this.socket.on('disconnect', () => {
+            console.log('Disconnected from signaling server');
             this.updateStatus('Disconnected from server', 'error');
-            this.updateChatStatus('Disconnected');
-            this.logSignaling(`Disconnected: ${reason}`, 'error');
         });
 
         this.socket.on('waiting', () => {
             this.updateStatus('Waiting for a partner...', 'waiting');
             this.logSignaling('Waiting for partner to join');
-            this.updateChatStatus('Waiting for partner...');
-            this.addSystemMessage('Waiting for a partner to join...');
         });
 
         this.socket.on('matched', (data) => {
             this.partnerId = data.partnerId;
             this.roomId = data.roomId;
-            this.connectionAttempts = 0;
             this.updatePartnerId(data.partnerId);
             this.updateRoomId(data.roomId);
             this.updateStatus('Partner found! Establishing connection...', 'connected');
-            this.updateChatStatus('Connected');
             this.logSignaling(`Matched with partner: ${data.partnerId}`);
-            this.addSystemMessage('Partner found! You can now chat and video call.');
-            this.enableChat();
             
             // Start WebRTC connection
             this.startWebRTCConnection();
@@ -127,23 +84,9 @@ class WebRTCVideoChat {
             this.handleIceCandidate(data.candidate);
         });
 
-        // Chat message events
-        this.socket.on('chat-message', (data) => {
-            this.addMessage(data.message, 'received');
-            this.logChat('Received Message', data.message);
-        });
-
-        this.socket.on('chat-message-sent', (data) => {
-            this.addMessage(data.message, 'sent');
-            this.logChat('Sent Message', data.message);
-        });
-
         this.socket.on('partner-left', () => {
             this.updateStatus('Partner disconnected', 'error');
-            this.updateChatStatus('Disconnected');
             this.logSignaling('Partner left the chat');
-            this.addSystemMessage('Partner has disconnected.');
-            this.disableChat();
             this.cleanupConnection();
         });
     }
@@ -153,67 +96,6 @@ class WebRTCVideoChat {
         this.startButton.addEventListener('click', () => this.startChat());
         this.nextButton.addEventListener('click', () => this.nextPartner());
         this.stopButton.addEventListener('click', () => this.stopChat());
-        
-        // Chat events
-        this.sendButton.addEventListener('click', () => this.sendMessage());
-        this.messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                this.sendMessage();
-            }
-        });
-    }
-
-    // Send chat message
-    sendMessage() {
-        const message = this.messageInput.value.trim();
-        if (message && this.socket && this.partnerId) {
-            this.socket.emit('chat-message', { message: message });
-            this.messageInput.value = '';
-        }
-    }
-
-    // Add message to chat
-    addMessage(message, type) {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${type}`;
-        messageDiv.textContent = message;
-        this.chatMessages.appendChild(messageDiv);
-        this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
-    }
-
-    // Add system message
-    addSystemMessage(message) {
-        // Clear existing system messages
-        const existingSystem = this.chatMessages.querySelector('.system-message');
-        if (existingSystem) {
-            existingSystem.remove();
-        }
-        
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'system-message';
-        messageDiv.textContent = message;
-        this.chatMessages.appendChild(messageDiv);
-        this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
-    }
-
-    // Enable chat functionality
-    enableChat() {
-        this.messageInput.disabled = false;
-        this.sendButton.disabled = false;
-        this.messageInput.placeholder = 'Type your message...';
-    }
-
-    // Disable chat functionality
-    disableChat() {
-        this.messageInput.disabled = true;
-        this.sendButton.disabled = true;
-        this.messageInput.placeholder = 'Chat disabled';
-    }
-
-    // Update chat status
-    updateChatStatus(status) {
-        this.chatStatus.textContent = status;
-        this.chatStatus.className = `chat-status ${status.toLowerCase().includes('connected') ? 'connected' : 'disconnected'}`;
     }
 
     // Start the chat process
@@ -221,67 +103,36 @@ class WebRTCVideoChat {
         try {
             this.updateStatus('Getting camera access...', 'waiting');
             
-            // Get user media with better constraints
+            // Get user media (camera and microphone)
             this.localStream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    width: { ideal: 1280, max: 1920 },
-                    height: { ideal: 720, max: 1080 },
-                    frameRate: { ideal: 30, max: 60 }
-                },
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                }
+                video: true,
+                audio: true
             });
             
             // Display local video
             this.localVideo.srcObject = this.localStream;
-            
-            // Ensure video plays
-            this.localVideo.onloadedmetadata = () => {
-                this.localVideo.play().catch(e => console.log('Local video play error:', e));
-            };
             
             // Join the chat room
             this.socket.emit('join-chat');
             
             this.startButton.disabled = true;
             this.updateStatus('Waiting for partner...', 'waiting');
-            this.updateChatStatus('Waiting for partner...');
-            this.addSystemMessage('Waiting for a partner to join...');
             
         } catch (error) {
             console.error('Error accessing media devices:', error);
             this.updateStatus('Error accessing camera/microphone', 'error');
             this.logSignaling(`Error: ${error.message}`, 'error');
-            
-            // Try with audio only if video fails
-            if (error.name === 'NotAllowedError' || error.name === 'NotFoundError') {
-                this.addSystemMessage('Camera access denied. Trying audio only...');
-                try {
-                    this.localStream = await navigator.mediaDevices.getUserMedia({
-                        audio: true,
-                        video: false
-                    });
-                    this.localVideo.srcObject = this.localStream;
-                    this.socket.emit('join-chat');
-                } catch (audioError) {
-                    this.addSystemMessage('Audio access also denied. Please allow camera/microphone access.');
-                }
-            }
         }
     }
 
     // Start WebRTC peer connection
     startWebRTCConnection() {
         try {
-            // Create RTCPeerConnection with enhanced configuration
+            // Create RTCPeerConnection
             this.peerConnection = new RTCPeerConnection(this.rtcConfig);
             
             // Add local stream tracks to peer connection
             this.localStream.getTracks().forEach(track => {
-                console.log(`Adding ${track.kind} track to peer connection`);
                 this.peerConnection.addTrack(track, this.localStream);
             });
 
@@ -310,14 +161,7 @@ class WebRTCVideoChat {
                 this.updateLocalCandidates();
                 this.logICE('Local Candidate', event.candidate);
                 this.socket.emit('ice-candidate', { candidate: event.candidate });
-            } else {
-                this.logSignaling('ICE gathering completed');
             }
-        };
-
-        // Handle ICE gathering state changes
-        this.peerConnection.onicegatheringstatechange = () => {
-            this.logSignaling(`ICE gathering state: ${this.peerConnection.iceGatheringState}`);
         };
 
         // Handle connection state changes
@@ -327,27 +171,10 @@ class WebRTCVideoChat {
             
             if (this.peerConnection.connectionState === 'connected') {
                 this.updateStatus('Connected! Video chat is active.', 'connected');
-                this.updateChatStatus('Connected');
                 this.nextButton.disabled = false;
                 this.stopButton.disabled = false;
-                this.addSystemMessage('WebRTC connection established successfully!');
             } else if (this.peerConnection.connectionState === 'failed') {
                 this.updateStatus('Connection failed', 'error');
-                this.updateChatStatus('Connection Failed');
-                this.addSystemMessage('WebRTC connection failed. This might be due to network restrictions.');
-                
-                // Attempt to reconnect if we haven't exceeded max attempts
-                if (this.connectionAttempts < this.maxConnectionAttempts) {
-                    this.connectionAttempts++;
-                    this.addSystemMessage(`Attempting to reconnect... (${this.connectionAttempts}/${this.maxConnectionAttempts})`);
-                    setTimeout(() => {
-                        this.retryConnection();
-                    }, 2000);
-                }
-            } else if (this.peerConnection.connectionState === 'disconnected') {
-                this.updateStatus('Connection lost', 'error');
-                this.updateChatStatus('Disconnected');
-                this.addSystemMessage('WebRTC connection lost.');
             }
         };
 
@@ -355,11 +182,6 @@ class WebRTCVideoChat {
         this.peerConnection.oniceconnectionstatechange = () => {
             this.updateIceConnectionState(this.peerConnection.iceConnectionState);
             this.logSignaling(`ICE connection state: ${this.peerConnection.iceConnectionState}`);
-            
-            if (this.peerConnection.iceConnectionState === 'failed') {
-                this.logSignaling('ICE connection failed - may need TURN server', 'error');
-                this.addSystemMessage('ICE connection failed. This might be due to restrictive firewalls.');
-            }
         };
 
         // Handle signaling state changes
@@ -368,72 +190,18 @@ class WebRTCVideoChat {
             this.logSignaling(`Signaling state: ${this.peerConnection.signalingState}`);
         };
 
-        // Handle incoming remote stream - FIXED VERSION
+        // Handle incoming remote stream
         this.peerConnection.ontrack = (event) => {
-            console.log('Received remote stream:', event);
-            this.logSignaling('Remote stream received');
-            
-            // Store the remote stream
-            this.remoteStream = event.streams[0];
-            
-            // Set the remote video source
-            this.remoteVideo.srcObject = this.remoteStream;
-            
-            // Ensure video plays
-            this.remoteVideo.onloadedmetadata = () => {
-                console.log('Remote video metadata loaded');
-                this.remoteVideo.play().catch(e => {
-                    console.log('Remote video play error:', e);
-                    this.logSignaling(`Remote video play error: ${e.message}`, 'error');
-                });
-            };
-            
-            // Handle video play events
-            this.remoteVideo.onplay = () => {
-                console.log('Remote video started playing');
-                this.logSignaling('Remote video is now playing');
-                this.addSystemMessage('Partner video is now visible!');
-            };
-            
-            this.remoteVideo.onerror = (error) => {
-                console.error('Remote video error:', error);
-                this.logSignaling(`Remote video error: ${error.message}`, 'error');
-            };
-            
-            this.logSignaling('Remote stream received successfully');
+            console.log('Received remote stream');
+            this.remoteVideo.srcObject = event.streams[0];
         };
-
-        // Handle negotiation needed
-        this.peerConnection.onnegotiationneeded = async () => {
-            this.logSignaling('Negotiation needed');
-            if (this.isInitiator) {
-                try {
-                    const offer = await this.peerConnection.createOffer();
-                    await this.peerConnection.setLocalDescription(offer);
-                    this.socket.emit('offer', { offer: offer });
-                } catch (error) {
-                    this.logSignaling(`Negotiation error: ${error.message}`, 'error');
-                }
-            }
-        };
-    }
-
-    // Retry connection
-    async retryConnection() {
-        if (this.peerConnection) {
-            this.peerConnection.close();
-        }
-        this.startWebRTCConnection();
     }
 
     // Create and send SDP offer
     async createOffer() {
         try {
             this.logSignaling('Creating SDP offer...');
-            const offer = await this.peerConnection.createOffer({
-                offerToReceiveAudio: true,
-                offerToReceiveVideo: true
-            });
+            const offer = await this.peerConnection.createOffer();
             await this.peerConnection.setLocalDescription(offer);
             
             this.logSDP('Local Offer', offer);
@@ -453,10 +221,7 @@ class WebRTCVideoChat {
             await this.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
             
             this.logSignaling('Creating SDP answer...');
-            const answer = await this.peerConnection.createAnswer({
-                offerToReceiveAudio: true,
-                offerToReceiveVideo: true
-            });
+            const answer = await this.peerConnection.createAnswer();
             await this.peerConnection.setLocalDescription(answer);
             
             this.logSDP('Local Answer', answer);
@@ -501,8 +266,6 @@ class WebRTCVideoChat {
         this.socket.emit('next-partner');
         this.cleanupConnection();
         this.updateStatus('Looking for next partner...', 'waiting');
-        this.updateChatStatus('Looking for partner...');
-        this.addSystemMessage('Looking for a new partner...');
         this.nextButton.disabled = true;
         this.stopButton.disabled = true;
     }
@@ -511,8 +274,6 @@ class WebRTCVideoChat {
     stopChat() {
         this.cleanupConnection();
         this.updateStatus('Chat stopped. Click "Start Chat" to begin again.', 'waiting');
-        this.updateChatStatus('Disconnected');
-        this.addSystemMessage('Chat stopped. Click "Start Chat" to begin again.');
         this.startButton.disabled = false;
         this.nextButton.disabled = true;
         this.stopButton.disabled = true;
@@ -525,12 +286,6 @@ class WebRTCVideoChat {
             this.peerConnection = null;
         }
         
-        // Stop and clear remote stream
-        if (this.remoteStream) {
-            this.remoteStream.getTracks().forEach(track => track.stop());
-            this.remoteStream = null;
-        }
-        
         if (this.remoteVideo.srcObject) {
             this.remoteVideo.srcObject.getTracks().forEach(track => track.stop());
             this.remoteVideo.srcObject = null;
@@ -541,7 +296,6 @@ class WebRTCVideoChat {
         this.isInitiator = false;
         this.localCandidates = 0;
         this.remoteCandidates = 0;
-        this.connectionAttempts = 0;
         
         this.updatePartnerId('-');
         this.updateRoomId('-');
@@ -550,7 +304,6 @@ class WebRTCVideoChat {
         this.updateSignalingState('-');
         this.updateLocalCandidates();
         this.updateRemoteCandidates();
-        this.disableChat();
     }
 
     // UI update methods
@@ -633,16 +386,6 @@ class WebRTCVideoChat {
         const logEntry = document.createElement('div');
         logEntry.className = 'log-entry received';
         logEntry.textContent = `[${timestamp}] ${message}: ${sdp.type} - ${sdp.sdp.substring(0, 100)}...`;
-        logElement.appendChild(logEntry);
-        logElement.scrollTop = logElement.scrollHeight;
-    }
-
-    logChat(message, content) {
-        const logElement = document.getElementById('chatDebugMessages');
-        const timestamp = new Date().toLocaleTimeString();
-        const logEntry = document.createElement('div');
-        logEntry.className = 'log-entry received';
-        logEntry.textContent = `[${timestamp}] ${message}: ${content}`;
         logElement.appendChild(logEntry);
         logElement.scrollTop = logElement.scrollHeight;
     }
