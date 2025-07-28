@@ -9,6 +9,8 @@ class WebRTCVideoChat {
         this.isInitiator = false;
         this.localCandidates = 0;
         this.remoteCandidates = 0;
+        this.connectionAttempts = 0;
+        this.maxConnectionAttempts = 3;
 
         // DOM elements
         this.localVideo = document.getElementById('localVideo');
@@ -24,21 +26,31 @@ class WebRTCVideoChat {
         this.sendButton = document.getElementById('sendButton');
         this.chatStatus = document.getElementById('chat-status');
 
-        // WebRTC configuration with STUN servers
+        // Enhanced WebRTC configuration with multiple STUN servers
         this.rtcConfig = {
             iceServers: [
+                // Google's public STUN servers
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:stun2.l.google.com:19302' },
                 { urls: 'stun:stun3.l.google.com:19302' },
-                { urls: 'stun:stun4.l.google.com:19302' }
+                { urls: 'stun:stun4.l.google.com:19302' },
+                // Additional STUN servers for better connectivity
+                { urls: 'stun:stun.stunprotocol.org:3478' },
+                { urls: 'stun:stun.voiparound.com:3478' },
+                { urls: 'stun:stun.voipbuster.com:3478' },
+                { urls: 'stun:stun.voipstunt.com:3478' },
+                { urls: 'stun:stun.voxgratia.org:3478' },
                 // Add TURN servers here if needed for production
                 // {
                 //     urls: 'turn:your-turn-server.com:3478',
                 //     username: 'username',
                 //     credential: 'password'
                 // }
-            ]
+            ],
+            iceCandidatePoolSize: 10,
+            bundlePolicy: 'max-bundle',
+            rtcpMuxPolicy: 'require'
         };
 
         this.initializeSocket();
@@ -48,7 +60,11 @@ class WebRTCVideoChat {
 
     // Initialize Socket.IO connection
     initializeSocket() {
-        this.socket = io();
+        this.socket = io({
+            transports: ['websocket', 'polling'],
+            timeout: 20000,
+            forceNew: true
+        });
         
         this.socket.on('connect', () => {
             console.log('Connected to signaling server');
@@ -56,10 +72,17 @@ class WebRTCVideoChat {
             this.updateUserId(this.socket.id);
         });
 
-        this.socket.on('disconnect', () => {
-            console.log('Disconnected from signaling server');
+        this.socket.on('connect_error', (error) => {
+            console.error('Socket connection error:', error);
+            this.updateStatus('Failed to connect to server', 'error');
+            this.logSignaling(`Connection error: ${error.message}`, 'error');
+        });
+
+        this.socket.on('disconnect', (reason) => {
+            console.log('Disconnected from signaling server:', reason);
             this.updateStatus('Disconnected from server', 'error');
             this.updateChatStatus('Disconnected');
+            this.logSignaling(`Disconnected: ${reason}`, 'error');
         });
 
         this.socket.on('waiting', () => {
@@ -72,6 +95,7 @@ class WebRTCVideoChat {
         this.socket.on('matched', (data) => {
             this.partnerId = data.partnerId;
             this.roomId = data.roomId;
+            this.connectionAttempts = 0;
             this.updatePartnerId(data.partnerId);
             this.updateRoomId(data.roomId);
             this.updateStatus('Partner found! Establishing connection...', 'connected');
@@ -196,10 +220,18 @@ class WebRTCVideoChat {
         try {
             this.updateStatus('Getting camera access...', 'waiting');
             
-            // Get user media (camera and microphone)
+            // Get user media with better constraints
             this.localStream = await navigator.mediaDevices.getUserMedia({
-                video: true,
-                audio: true
+                video: {
+                    width: { ideal: 1280, max: 1920 },
+                    height: { ideal: 720, max: 1080 },
+                    frameRate: { ideal: 30, max: 60 }
+                },
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
             });
             
             // Display local video
@@ -217,13 +249,28 @@ class WebRTCVideoChat {
             console.error('Error accessing media devices:', error);
             this.updateStatus('Error accessing camera/microphone', 'error');
             this.logSignaling(`Error: ${error.message}`, 'error');
+            
+            // Try with audio only if video fails
+            if (error.name === 'NotAllowedError' || error.name === 'NotFoundError') {
+                this.addSystemMessage('Camera access denied. Trying audio only...');
+                try {
+                    this.localStream = await navigator.mediaDevices.getUserMedia({
+                        audio: true,
+                        video: false
+                    });
+                    this.localVideo.srcObject = this.localStream;
+                    this.socket.emit('join-chat');
+                } catch (audioError) {
+                    this.addSystemMessage('Audio access also denied. Please allow camera/microphone access.');
+                }
+            }
         }
     }
 
     // Start WebRTC peer connection
     startWebRTCConnection() {
         try {
-            // Create RTCPeerConnection
+            // Create RTCPeerConnection with enhanced configuration
             this.peerConnection = new RTCPeerConnection(this.rtcConfig);
             
             // Add local stream tracks to peer connection
@@ -256,7 +303,14 @@ class WebRTCVideoChat {
                 this.updateLocalCandidates();
                 this.logICE('Local Candidate', event.candidate);
                 this.socket.emit('ice-candidate', { candidate: event.candidate });
+            } else {
+                this.logSignaling('ICE gathering completed');
             }
+        };
+
+        // Handle ICE gathering state changes
+        this.peerConnection.onicegatheringstatechange = () => {
+            this.logSignaling(`ICE gathering state: ${this.peerConnection.iceGatheringState}`);
         };
 
         // Handle connection state changes
@@ -269,9 +323,24 @@ class WebRTCVideoChat {
                 this.updateChatStatus('Connected');
                 this.nextButton.disabled = false;
                 this.stopButton.disabled = false;
+                this.addSystemMessage('WebRTC connection established successfully!');
             } else if (this.peerConnection.connectionState === 'failed') {
                 this.updateStatus('Connection failed', 'error');
                 this.updateChatStatus('Connection Failed');
+                this.addSystemMessage('WebRTC connection failed. This might be due to network restrictions.');
+                
+                // Attempt to reconnect if we haven't exceeded max attempts
+                if (this.connectionAttempts < this.maxConnectionAttempts) {
+                    this.connectionAttempts++;
+                    this.addSystemMessage(`Attempting to reconnect... (${this.connectionAttempts}/${this.maxConnectionAttempts})`);
+                    setTimeout(() => {
+                        this.retryConnection();
+                    }, 2000);
+                }
+            } else if (this.peerConnection.connectionState === 'disconnected') {
+                this.updateStatus('Connection lost', 'error');
+                this.updateChatStatus('Disconnected');
+                this.addSystemMessage('WebRTC connection lost.');
             }
         };
 
@@ -279,6 +348,11 @@ class WebRTCVideoChat {
         this.peerConnection.oniceconnectionstatechange = () => {
             this.updateIceConnectionState(this.peerConnection.iceConnectionState);
             this.logSignaling(`ICE connection state: ${this.peerConnection.iceConnectionState}`);
+            
+            if (this.peerConnection.iceConnectionState === 'failed') {
+                this.logSignaling('ICE connection failed - may need TURN server', 'error');
+                this.addSystemMessage('ICE connection failed. This might be due to restrictive firewalls.');
+            }
         };
 
         // Handle signaling state changes
@@ -291,14 +365,40 @@ class WebRTCVideoChat {
         this.peerConnection.ontrack = (event) => {
             console.log('Received remote stream');
             this.remoteVideo.srcObject = event.streams[0];
+            this.logSignaling('Remote stream received successfully');
         };
+
+        // Handle negotiation needed
+        this.peerConnection.onnegotiationneeded = async () => {
+            this.logSignaling('Negotiation needed');
+            if (this.isInitiator) {
+                try {
+                    const offer = await this.peerConnection.createOffer();
+                    await this.peerConnection.setLocalDescription(offer);
+                    this.socket.emit('offer', { offer: offer });
+                } catch (error) {
+                    this.logSignaling(`Negotiation error: ${error.message}`, 'error');
+                }
+            }
+        };
+    }
+
+    // Retry connection
+    async retryConnection() {
+        if (this.peerConnection) {
+            this.peerConnection.close();
+        }
+        this.startWebRTCConnection();
     }
 
     // Create and send SDP offer
     async createOffer() {
         try {
             this.logSignaling('Creating SDP offer...');
-            const offer = await this.peerConnection.createOffer();
+            const offer = await this.peerConnection.createOffer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: true
+            });
             await this.peerConnection.setLocalDescription(offer);
             
             this.logSDP('Local Offer', offer);
@@ -318,7 +418,10 @@ class WebRTCVideoChat {
             await this.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
             
             this.logSignaling('Creating SDP answer...');
-            const answer = await this.peerConnection.createAnswer();
+            const answer = await this.peerConnection.createAnswer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: true
+            });
             await this.peerConnection.setLocalDescription(answer);
             
             this.logSDP('Local Answer', answer);
@@ -397,6 +500,7 @@ class WebRTCVideoChat {
         this.isInitiator = false;
         this.localCandidates = 0;
         this.remoteCandidates = 0;
+        this.connectionAttempts = 0;
         
         this.updatePartnerId('-');
         this.updateRoomId('-');

@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Connection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-result {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .warning { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebRTC Connection Test</h1>
+    
+    <div class="test-section">
+        <h2>1. Browser Compatibility</h2>
+        <div id="browser-test"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. Media Device Access</h2>
+        <button onclick="testMediaDevices()">Test Camera/Microphone</button>
+        <div id="media-test"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. WebRTC API Support</h2>
+        <div id="webrtc-test"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. STUN Server Connectivity</h2>
+        <button onclick="testSTUNServers()">Test STUN Servers</button>
+        <div id="stun-test"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>5. Signaling Server Connection</h2>
+        <button onclick="testSignalingServer()">Test Signaling Server</button>
+        <div id="signaling-test"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>6. Network Information</h2>
+        <div id="network-info"></div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        // Test results container
+        function addResult(containerId, message, type = 'info') {
+            const container = document.getElementById(containerId);
+            const div = document.createElement('div');
+            div.className = `test-result ${type}`;
+            div.textContent = message;
+            container.appendChild(div);
+        }
+
+        // 1. Browser Compatibility Test
+        function testBrowserCompatibility() {
+            const container = document.getElementById('browser-test');
+            container.innerHTML = '';
+
+            // Check for WebRTC support
+            if (typeof RTCPeerConnection !== 'undefined') {
+                addResult('browser-test', '✅ RTCPeerConnection is supported', 'success');
+            } else {
+                addResult('browser-test', '❌ RTCPeerConnection is not supported', 'error');
+            }
+
+            // Check for getUserMedia support
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                addResult('browser-test', '✅ getUserMedia is supported', 'success');
+            } else {
+                addResult('browser-test', '❌ getUserMedia is not supported', 'error');
+            }
+
+            // Check for Socket.IO
+            if (typeof io !== 'undefined') {
+                addResult('browser-test', '✅ Socket.IO is available', 'success');
+            } else {
+                addResult('browser-test', '❌ Socket.IO is not available', 'error');
+            }
+
+            // Browser info
+            addResult('browser-test', `ℹ️ Browser: ${navigator.userAgent}`, 'info');
+        }
+
+        // 2. Media Devices Test
+        async function testMediaDevices() {
+            const container = document.getElementById('media-test');
+            container.innerHTML = '';
+
+            try {
+                addResult('media-test', 'Testing camera and microphone access...', 'info');
+                
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: true,
+                    audio: true
+                });
+
+                addResult('media-test', '✅ Camera and microphone access granted', 'success');
+                
+                // Get device info
+                const tracks = stream.getTracks();
+                tracks.forEach(track => {
+                    addResult('media-test', `ℹ️ ${track.kind}: ${track.label || 'Unknown device'}`, 'info');
+                });
+
+                // Stop the stream
+                stream.getTracks().forEach(track => track.stop());
+                
+            } catch (error) {
+                addResult('media-test', `❌ Media access failed: ${error.message}`, 'error');
+                
+                if (error.name === 'NotAllowedError') {
+                    addResult('media-test', '⚠️ Permission denied. Please allow camera/microphone access.', 'warning');
+                } else if (error.name === 'NotFoundError') {
+                    addResult('media-test', '⚠️ No camera or microphone found.', 'warning');
+                }
+            }
+        }
+
+        // 3. WebRTC API Test
+        function testWebRTCAPI() {
+            const container = document.getElementById('webrtc-test');
+            container.innerHTML = '';
+
+            try {
+                // Test RTCPeerConnection creation
+                const pc = new RTCPeerConnection({
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' }
+                    ]
+                });
+
+                addResult('webrtc-test', '✅ RTCPeerConnection created successfully', 'success');
+                addResult('webrtc-test', `ℹ️ Connection state: ${pc.connectionState}`, 'info');
+                addResult('webrtc-test', `ℹ️ ICE connection state: ${pc.iceConnectionState}`, 'info');
+                addResult('webrtc-test', `ℹ️ Signaling state: ${pc.signalingState}`, 'info');
+
+                pc.close();
+                
+            } catch (error) {
+                addResult('webrtc-test', `❌ RTCPeerConnection creation failed: ${error.message}`, 'error');
+            }
+        }
+
+        // 4. STUN Server Test
+        async function testSTUNServers() {
+            const container = document.getElementById('stun-test');
+            container.innerHTML = '';
+
+            const stunServers = [
+                'stun:stun.l.google.com:19302',
+                'stun:stun1.l.google.com:19302',
+                'stun:stun2.l.google.com:19302',
+                'stun:stun.stunprotocol.org:3478'
+            ];
+
+            for (const stunServer of stunServers) {
+                try {
+                    addResult('stun-test', `Testing ${stunServer}...`, 'info');
+                    
+                    const pc = new RTCPeerConnection({
+                        iceServers: [{ urls: stunServer }]
+                    });
+
+                    // Create a data channel to trigger ICE gathering
+                    const dc = pc.createDataChannel('test');
+                    
+                    // Wait for ICE gathering
+                    await new Promise((resolve, reject) => {
+                        const timeout = setTimeout(() => {
+                            reject(new Error('Timeout'));
+                        }, 5000);
+
+                        pc.onicecandidate = (event) => {
+                            if (event.candidate) {
+                                clearTimeout(timeout);
+                                resolve();
+                            }
+                        };
+
+                        pc.onicegatheringstatechange = () => {
+                            if (pc.iceGatheringState === 'complete') {
+                                clearTimeout(timeout);
+                                resolve();
+                            }
+                        };
+                    });
+
+                    addResult('stun-test', `✅ ${stunServer} - Working`, 'success');
+                    pc.close();
+                    
+                } catch (error) {
+                    addResult('stun-test', `❌ ${stunServer} - Failed: ${error.message}`, 'error');
+                }
+            }
+        }
+
+        // 5. Signaling Server Test
+        function testSignalingServer() {
+            const container = document.getElementById('signaling-test');
+            container.innerHTML = '';
+
+            try {
+                const socket = io({
+                    transports: ['websocket', 'polling'],
+                    timeout: 10000
+                });
+
+                addResult('signaling-test', 'Connecting to signaling server...', 'info');
+
+                socket.on('connect', () => {
+                    addResult('signaling-test', `✅ Connected to signaling server (ID: ${socket.id})`, 'success');
+                    socket.disconnect();
+                });
+
+                socket.on('connect_error', (error) => {
+                    addResult('signaling-test', `❌ Connection failed: ${error.message}`, 'error');
+                });
+
+                socket.on('disconnect', (reason) => {
+                    addResult('signaling-test', `ℹ️ Disconnected: ${reason}`, 'info');
+                });
+
+            } catch (error) {
+                addResult('signaling-test', `❌ Socket.IO error: ${error.message}`, 'error');
+            }
+        }
+
+        // 6. Network Information
+        function getNetworkInfo() {
+            const container = document.getElementById('network-info');
+            container.innerHTML = '';
+
+            // Connection info
+            if (navigator.connection) {
+                const conn = navigator.connection;
+                addResult('network-info', `ℹ️ Connection type: ${conn.effectiveType || 'unknown'}`, 'info');
+                addResult('network-info', `ℹ️ Downlink: ${conn.downlink || 'unknown'} Mbps`, 'info');
+                addResult('network-info', `ℹ️ RTT: ${conn.rtt || 'unknown'} ms`, 'info');
+            } else {
+                addResult('network-info', 'ℹ️ Network information not available', 'info');
+            }
+
+            // User agent
+            addResult('network-info', `ℹ️ User Agent: ${navigator.userAgent}`, 'info');
+
+            // Platform
+            addResult('network-info', `ℹ️ Platform: ${navigator.platform}`, 'info');
+
+            // Language
+            addResult('network-info', `ℹ️ Language: ${navigator.language}`, 'info');
+
+            // Online status
+            addResult('network-info', `ℹ️ Online: ${navigator.onLine ? 'Yes' : 'No'}`, 'info');
+        }
+
+        // Run tests on page load
+        window.addEventListener('load', () => {
+            testBrowserCompatibility();
+            testWebRTCAPI();
+            getNetworkInfo();
+        });
+    </script>
+</body>
+</html> 
