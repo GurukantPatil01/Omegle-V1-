@@ -1,4 +1,4 @@
-# WebRTC Video Chat Application
+# WebRTC Video Chat Application (Omegle-like)
 
 A complete WebRTC peer-to-peer video chat application that demonstrates all the core concepts of WebRTC technology. This application includes a signaling server, STUN server configuration, and a modern web interface with real-time debugging capabilities.
 
@@ -74,10 +74,10 @@ Once enough ICE candidates are exchanged and the best path is found, the browser
 
 ### Installation Steps
 
-1. **Clone or download the project**
+1. **Clone the repository**
    ```bash
-   # If you have the files locally, navigate to the project directory
-   cd webrtc-video-chat
+   git clone https://github.com/GurukantPatil01/Omegle-V1-.git
+   cd Omegle-V1-
    ```
 
 2. **Install dependencies**
@@ -91,7 +91,7 @@ Once enough ICE candidates are exchanged and the best path is found, the browser
    ```
 
 4. **Open the application**
-   - Open your browser and navigate to `http://localhost:3000`
+   - Open your browser and navigate to `http://localhost:3001`
    - Allow camera and microphone access when prompted
    - Open another browser tab/window to test with a second user
 
