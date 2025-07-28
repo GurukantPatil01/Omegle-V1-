@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Video Chat</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>WebRTC Video Chat</h1>
+            <p>Experience peer-to-peer video communication</p>
+        </header>
+
+        <div class="main-content">
+            <!-- Connection Status -->
+            <div class="status-section">
+                <div id="connection-status" class="status waiting">
+                    <span class="status-icon">⏳</span>
+                    <span class="status-text">Connecting to server...</span>
+                </div>
+            </div>
+
+            <!-- Video Section -->
+            <div class="video-section">
+                <div class="video-container">
+                    <video id="localVideo" autoplay muted playsinline></video>
+                    <div class="video-label">You</div>
+                </div>
+                <div class="video-container">
+                    <video id="remoteVideo" autoplay playsinline></video>
+                    <div class="video-label">Partner</div>
+                </div>
+            </div>
+
+            <!-- Controls -->
+            <div class="controls">
+                <button id="startButton" class="btn btn-primary">Start Chat</button>
+                <button id="nextButton" class="btn btn-secondary" disabled>Next Partner</button>
+                <button id="stopButton" class="btn btn-danger" disabled>Stop</button>
+            </div>
+
+            <!-- Connection Info -->
+            <div class="info-section">
+                <div class="info-card">
+                    <h3>Connection Information</h3>
+                    <div id="connection-info">
+                        <p><strong>Your ID:</strong> <span id="userId">-</span></p>
+                        <p><strong>Partner ID:</strong> <span id="partnerId">-</span></p>
+                        <p><strong>Room ID:</strong> <span id="roomId">-</span></p>
+                        <p><strong>Connection State:</strong> <span id="connectionState">-</span></p>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <h3>WebRTC Statistics</h3>
+                    <div id="stats">
+                        <p><strong>ICE Connection State:</strong> <span id="iceConnectionState">-</span></p>
+                        <p><strong>Signaling State:</strong> <span id="signalingState">-</span></p>
+                        <p><strong>Local Candidates:</strong> <span id="localCandidates">0</span></p>
+                        <p><strong>Remote Candidates:</strong> <span id="remoteCandidates">0</span></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Debug Section -->
+            <div class="debug-section">
+                <h3>Debug Information</h3>
+                <div class="debug-tabs">
+                    <button class="tab-btn active" onclick="showTab('signaling')">Signaling</button>
+                    <button class="tab-btn" onclick="showTab('ice')">ICE Candidates</button>
+                    <button class="tab-btn" onclick="showTab('sdp')">SDP</button>
+                </div>
+                <div id="signaling-log" class="debug-content active">
+                    <div id="signalingMessages" class="log-content"></div>
+                </div>
+                <div id="ice-log" class="debug-content">
+                    <div id="iceMessages" class="log-content"></div>
+                </div>
+                <div id="sdp-log" class="debug-content">
+                    <div id="sdpMessages" class="log-content"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html> 
