@@ -235,7 +235,7 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3002;
 server.listen(PORT, () => {
   log(`Signaling server running on port ${PORT}`, 'info');
   log(`Open http://localhost:${PORT} in your browser`, 'info');

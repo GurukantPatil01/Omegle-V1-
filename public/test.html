@@ -145,8 +145,34 @@
                     addResult('media-test', `ℹ️ ${track.kind}: ${track.label || 'Unknown device'}`, 'info');
                 });
 
-                // Stop the stream
-                stream.getTracks().forEach(track => track.stop());
+                // Test video playback
+                const testVideo = document.createElement('video');
+                testVideo.srcObject = stream;
+                testVideo.autoplay = true;
+                testVideo.muted = true;
+                testVideo.style.width = '200px';
+                testVideo.style.height = '150px';
+                testVideo.style.border = '1px solid #ccc';
+                
+                testVideo.onloadedmetadata = () => {
+                    addResult('media-test', '✅ Video metadata loaded successfully', 'success');
+                    testVideo.play().then(() => {
+                        addResult('media-test', '✅ Video playback test successful', 'success');
+                    }).catch(e => {
+                        addResult('media-test', `❌ Video playback failed: ${e.message}`, 'error');
+                    });
+                };
+                
+                container.appendChild(testVideo);
+
+                // Stop the stream after 5 seconds
+                setTimeout(() => {
+                    stream.getTracks().forEach(track => track.stop());
+                    if (testVideo.parentNode) {
+                        testVideo.parentNode.removeChild(testVideo);
+                    }
+                    addResult('media-test', 'ℹ️ Test completed, stream stopped', 'info');
+                }, 5000);
                 
             } catch (error) {
                 addResult('media-test', `❌ Media access failed: ${error.message}`, 'error');

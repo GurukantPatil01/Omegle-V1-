@@ -3,6 +3,7 @@ class WebRTCVideoChat {
     constructor() {
         this.socket = null;
         this.localStream = null;
+        this.remoteStream = null;
         this.peerConnection = null;
         this.partnerId = null;
         this.roomId = null;
@@ -237,6 +238,11 @@ class WebRTCVideoChat {
             // Display local video
             this.localVideo.srcObject = this.localStream;
             
+            // Ensure video plays
+            this.localVideo.onloadedmetadata = () => {
+                this.localVideo.play().catch(e => console.log('Local video play error:', e));
+            };
+            
             // Join the chat room
             this.socket.emit('join-chat');
             
@@ -275,6 +281,7 @@ class WebRTCVideoChat {
             
             // Add local stream tracks to peer connection
             this.localStream.getTracks().forEach(track => {
+                console.log(`Adding ${track.kind} track to peer connection`);
                 this.peerConnection.addTrack(track, this.localStream);
             });
 
@@ -361,10 +368,38 @@ class WebRTCVideoChat {
             this.logSignaling(`Signaling state: ${this.peerConnection.signalingState}`);
         };
 
-        // Handle incoming remote stream
+        // Handle incoming remote stream - FIXED VERSION
         this.peerConnection.ontrack = (event) => {
-            console.log('Received remote stream');
-            this.remoteVideo.srcObject = event.streams[0];
+            console.log('Received remote stream:', event);
+            this.logSignaling('Remote stream received');
+            
+            // Store the remote stream
+            this.remoteStream = event.streams[0];
+            
+            // Set the remote video source
+            this.remoteVideo.srcObject = this.remoteStream;
+            
+            // Ensure video plays
+            this.remoteVideo.onloadedmetadata = () => {
+                console.log('Remote video metadata loaded');
+                this.remoteVideo.play().catch(e => {
+                    console.log('Remote video play error:', e);
+                    this.logSignaling(`Remote video play error: ${e.message}`, 'error');
+                });
+            };
+            
+            // Handle video play events
+            this.remoteVideo.onplay = () => {
+                console.log('Remote video started playing');
+                this.logSignaling('Remote video is now playing');
+                this.addSystemMessage('Partner video is now visible!');
+            };
+            
+            this.remoteVideo.onerror = (error) => {
+                console.error('Remote video error:', error);
+                this.logSignaling(`Remote video error: ${error.message}`, 'error');
+            };
+            
             this.logSignaling('Remote stream received successfully');
         };
 
@@ -488,6 +523,12 @@ class WebRTCVideoChat {
         if (this.peerConnection) {
             this.peerConnection.close();
             this.peerConnection = null;
+        }
+        
+        // Stop and clear remote stream
+        if (this.remoteStream) {
+            this.remoteStream.getTracks().forEach(track => track.stop());
+            this.remoteStream = null;
         }
         
         if (this.remoteVideo.srcObject) {
