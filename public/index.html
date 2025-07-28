@@ -11,7 +11,7 @@
     <div class="container">
         <header>
             <h1>WebRTC Video Chat</h1>
-            <p>Experience peer-to-peer video communication</p>
+            <p>Experience peer-to-peer video communication with text chat</p>
         </header>
 
         <div class="main-content">
@@ -23,15 +23,35 @@
                 </div>
             </div>
 
-            <!-- Video Section -->
-            <div class="video-section">
-                <div class="video-container">
-                    <video id="localVideo" autoplay muted playsinline></video>
-                    <div class="video-label">You</div>
+            <!-- Video and Chat Section -->
+            <div class="video-chat-section">
+                <!-- Video Section -->
+                <div class="video-section">
+                    <div class="video-container">
+                        <video id="localVideo" autoplay muted playsinline></video>
+                        <div class="video-label">You</div>
+                    </div>
+                    <div class="video-container">
+                        <video id="remoteVideo" autoplay playsinline></video>
+                        <div class="video-label">Partner</div>
+                    </div>
                 </div>
-                <div class="video-container">
-                    <video id="remoteVideo" autoplay playsinline></video>
-                    <div class="video-label">Partner</div>
+
+                <!-- Chat Section -->
+                <div class="chat-section">
+                    <div class="chat-header">
+                        <h3>💬 Chat</h3>
+                        <span id="chat-status" class="chat-status">Disconnected</span>
+                    </div>
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="system-message">
+                            Welcome! Start a video chat to begin messaging.
+                        </div>
+                    </div>
+                    <div class="chat-input-section">
+                        <input type="text" id="messageInput" placeholder="Type your message..." disabled>
+                        <button id="sendButton" disabled>Send</button>
+                    </div>
                 </div>
             </div>
 
@@ -42,7 +62,7 @@
                 <button id="stopButton" class="btn btn-danger" disabled>Stop</button>
             </div>
 
-            <!-- Connection Info -->
+            <!-- Connection Info 
             <div class="info-section">
                 <div class="info-card">
                     <h3>Connection Information</h3>
@@ -64,14 +84,15 @@
                     </div>
                 </div>
             </div>
-
-            <!-- Debug Section -->
+     -->
+            <!-- Debug Section 
             <div class="debug-section">
                 <h3>Debug Information</h3>
                 <div class="debug-tabs">
                     <button class="tab-btn active" onclick="showTab('signaling')">Signaling</button>
                     <button class="tab-btn" onclick="showTab('ice')">ICE Candidates</button>
                     <button class="tab-btn" onclick="showTab('sdp')">SDP</button>
+                    <button class="tab-btn" onclick="showTab('chat')">Chat Messages</button>
                 </div>
                 <div id="signaling-log" class="debug-content active">
                     <div id="signalingMessages" class="log-content"></div>
@@ -82,10 +103,13 @@
                 <div id="sdp-log" class="debug-content">
                     <div id="sdpMessages" class="log-content"></div>
                 </div>
+                <div id="chat-log" class="debug-content">
+                    <div id="chatDebugMessages" class="log-content"></div>
+                </div>
             </div>
         </div>
     </div>
-
+-->
     <script src="app.js"></script>
 </body>
 </html> 
