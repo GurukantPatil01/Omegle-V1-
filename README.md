@@ -1,6 +1,6 @@
 # WebRTC Video Chat Application (Omegle-like)
 
-A complete WebRTC peer-to-peer video chat application that demonstrates all the core concepts of WebRTC technology. This application includes a signaling server, STUN server configuration, and a modern web interface with real-time debugging capabilities.
+A complete WebRTC peer-to-peer video chat application with integrated text messaging that demonstrates all the core concepts of WebRTC technology. This application includes a signaling server, STUN server configuration, Socket.IO chat interface, and a modern web interface with real-time debugging capabilities.
 
 ## 🎯 What is WebRTC?
 
@@ -19,11 +19,13 @@ WebRTC (Web Real-Time Communication) is a free, open-source project that enables
    - Implements the complete WebRTC API
    - Handles media capture and peer connections
    - Manages signaling and ICE candidate exchange
+   - Integrates Socket.IO chat functionality
 
 3. **Modern UI** (`public/index.html`, `public/styles.css`)
    - Responsive design with real-time status updates
-   - Debug panels for monitoring WebRTC states
-   - Professional video chat interface
+   - Integrated chat interface with message history
+   - Debug panels for monitoring WebRTC states and chat messages
+   - Professional video chat interface with text messaging
 
 ## 🔄 WebRTC Connection Flow
 
@@ -101,8 +103,9 @@ Once enough ICE candidates are exchanged and the best path is found, the browser
 1. **Start Chat**: Click the "Start Chat" button to begin
 2. **Wait for Partner**: The app will automatically match you with another user
 3. **Video Chat**: Once connected, you'll see both your video and your partner's video
-4. **Next Partner**: Click "Next Partner" to connect with a different user
-5. **Stop**: Click "Stop" to end the current session
+4. **Text Chat**: Use the chat interface to send text messages while video chatting
+5. **Next Partner**: Click "Next Partner" to connect with a different user
+6. **Stop**: Click "Stop" to end the current session
 
 ### Debug Features
 The application includes comprehensive debugging tools:
@@ -110,6 +113,7 @@ The application includes comprehensive debugging tools:
 - **Signaling Tab**: Shows all signaling messages exchanged
 - **ICE Candidates Tab**: Displays ICE candidate information
 - **SDP Tab**: Shows Session Description Protocol details
+- **Chat Messages Tab**: Displays all chat message activity
 - **Connection Info**: Real-time connection state monitoring
 
 ## 🔧 Technical Details
@@ -144,6 +148,23 @@ const rtcConfig = {
 
 4. **`RTCIceCandidate`**
    - Represents network connectivity candidates
+
+### Socket.IO Chat Features
+
+1. **Real-time Messaging**
+   - Instant text message delivery between connected users
+   - Message history within the current session
+   - System messages for connection status updates
+
+2. **Chat State Management**
+   - Automatic enable/disable based on connection status
+   - Visual indicators for chat availability
+   - Message input validation and error handling
+
+3. **Debug Integration**
+   - Chat message logging in debug panels
+   - Real-time chat activity monitoring
+   - Message delivery confirmation
 
 ### Connection States
 
